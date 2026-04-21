@@ -1,1 +1,86 @@
-<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Teachable Machine Model</title>\n    <style>\n        body {\n            font-family: Arial, sans-serif;\n            display: flex;\n            flex-direction: column;\n            align-items: center;\n            justify-content: center;\n            height: 100vh;\n            background-color: #f0f0f0;\n        }\n        #results {\n            margin-top: 20px;\n            font-size: 20px;\n        }\n        #video {\n            border: solid 2px #ccc;\n            width: 640px;\n            height: 480px;\n        }\n    </style>\n    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>\n    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>\n    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-automl"></script>\n</head>\n<body>\n    <h1>Teachable Machine Model</h1>\n    <video id="video" autoplay></video>\n    <button id="upload">Upload Image</button>\n    <input type="file" id="fileInput" style="display: none;" accept="image/*">\n    <div id="results"></div>\n    <script>\n        let model;\n        async function loadModel() {\n            model = await tf.loadLayersModel('https://teachablemachine.withgoogle.com/models/sTBoNGgmv/model.json');\n            document.getElementById('results').innerText = 'Model Loaded';\n        }\n        async function predict() {\n            const video = document.getElementById('video');\n            const predictions = await model.predict(tf.browser.fromPixels(video).resizeNearestNeighbor([224, 224]).expandDims(0));\n            // Process predictions here\n            document.getElementById('results').innerText = predictions;\n        }\n        document.getElementById('upload').onclick = () => {\n            document.getElementById('fileInput').click();\n        };\n        document.getElementById('fileInput').onchange = (event) => {\n            const file = event.target.files[0];\n            const reader = new FileReader();\n            reader.onload = (e) => {\n                const imgElement = document.createElement('img');\n                imgElement.src = e.target.result;\n                imgElement.onload = predict;\n            };\n            reader.readAsDataURL(file);\n        };\n        navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {\n            const video = document.getElementById('video');\n            video.srcObject = stream;\n            loadModel();\n        });\n    </script>\n</body>\n</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teachable Machine Image Recognition</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        #container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #video {
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #upload {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Teachable Machine Image Recognition</h1>
+        <video id="video" playsinline autoplay></video>
+        <button id="upload">Upload Image</button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;" />
+        <div id="result"></div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/Image" async></script>
+    <script>
+        const URL = "https://teachablemachine.withgoogle.com/models/YOUR_MODEL_URL/";
+        let model, webcam, labelContainer;
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            model = await tmImage.load(modelURL, metadataURL);
+            labelContainer = document.getElementById("result");
+            webcam = new tmImage.Video(640, 480);
+            await webcam.setup();
+            await webcam.play();
+            requestAnimationFrame(loop);
+        }
+
+        async function loop() {
+            const predicted = await model.predict(webcam.capture());
+            labelContainer.innerHTML = `Prediction: ${predicted[0].className} - Probability: ${predicted[0].probability.toFixed(2)}`;
+            requestAnimationFrame(loop);
+        }
+
+        document.getElementById('upload').onclick = () => {
+            document.getElementById('fileInput').click();
+        };
+
+        document.getElementById('fileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.src = e.target.result;
+                img.onload = async () => {
+                    const prediction = await model.predict(tmImage.fromImage(img));
+                    labelContainer.innerHTML = `Prediction: ${prediction[0].className} - Probability: ${prediction[0].probability.toFixed(2)}`;
+                };
+                document.body.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        window.onload = init;
+    </script>
+</body>
+</html>
