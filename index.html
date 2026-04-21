@@ -3,84 +3,361 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teachable Machine Image Recognition</title>
+    <title>Teachable Machine - Image Classification</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        * {
             margin: 0;
-            padding: 20px;
-            background-color: #f4f4f4;
+            padding: 0;
+            box-sizing: border-box;
         }
-        #container {
-            max-width: 600px;
-            margin: auto;
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
             background: white;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        #video {
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 700px;
             width: 100%;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            padding: 40px;
         }
-        #upload {
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 12px;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        button:active:not(:disabled) {
+            transform: translateY(-1px);
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        #webcam {
+            width: 100%;
+            border-radius: 10px;
+            background: #000;
+            margin: 15px 0;
+            border: 2px solid #667eea;
+        }
+        
+        #imagePreview {
+            width: 100%;
+            border-radius: 10px;
+            margin: 15px 0;
+            display: none;
+            border: 2px solid #667eea;
+        }
+        
+        #results {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 10px;
+            padding: 20px;
             margin-top: 20px;
+            display: none;
+        }
+        
+        .result-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .result-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .class-name {
+            min-width: 120px;
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .bar-container {
+            flex: 1;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            margin: 0 15px;
+            overflow: hidden;
+        }
+        
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 5px;
+            transition: width 0.5s ease;
+        }
+        
+        .percentage {
+            min-width: 50px;
+            text-align: right;
+            font-weight: bold;
+            color: #667eea;
+            font-size: 14px;
+        }
+        
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status.show {
+            display: block;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #0c5460;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #721c24;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #667eea;
+            margin-right: 5px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
     </style>
 </head>
 <body>
-    <div id="container">
-        <h1>Teachable Machine Image Recognition</h1>
-        <video id="video" playsinline autoplay></video>
-        <button id="upload">Upload Image</button>
-        <input type="file" id="fileInput" accept="image/*" style="display:none;" />
-        <div id="result"></div>
+    <div class="container">
+        <h1>🎯 Teachable Machine</h1>
+        <div class="subtitle">AI-Powered Image Recognition</div>
+        
+        <div id="status" class="status"></div>
+        
+        <!-- Load Model -->
+        <div class="section">
+            <div class="section-title">⚙️ Initialize Model</div>
+            <button onclick="loadModel()" id="loadBtn">Load Model</button>
+        </div>
+        
+        <!-- Upload Image -->
+        <div class="section">
+            <div class="section-title">📤 Upload & Classify Image</div>
+            <button onclick="document.getElementById('imageInput').click()" id="uploadBtn" disabled>
+                Choose Image
+            </button>
+            <input type="file" id="imageInput" accept="image/*">
+            <img id="imagePreview" alt="Image preview">
+        </div>
+        
+        <!-- Webcam -->
+        <div class="section">
+            <div class="section-title">📷 Real-Time Webcam Classification</div>
+            <button onclick="toggleWebcam()" id="webcamBtn" disabled>Start Webcam</button>
+            <canvas id="webcam" style="display: none;"></canvas>
+        </div>
+        
+        <!-- Results -->
+        <div id="results"></div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/Image" async></script>
+
     <script>
-        const URL = "https://teachablemachine.withgoogle.com/models/YOUR_MODEL_URL/";
-        let model, webcam, labelContainer;
+        const URL = "https://teachablemachine.withgoogle.com/models/sTBoNGgmv/";
+        
+        let model, webcam, webcamRunning = false;
 
-        async function init() {
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
-
-            model = await tmImage.load(modelURL, metadataURL);
-            labelContainer = document.getElementById("result");
-            webcam = new tmImage.Video(640, 480);
-            await webcam.setup();
-            await webcam.play();
-            requestAnimationFrame(loop);
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status show ${type}`;
         }
 
-        async function loop() {
-            const predicted = await model.predict(webcam.capture());
-            labelContainer.innerHTML = `Prediction: ${predicted[0].className} - Probability: ${predicted[0].probability.toFixed(2)}`;
-            requestAnimationFrame(loop);
+        async function loadModel() {
+            try {
+                showStatus('Loading model...', 'info');
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+                
+                model = await tmImage.load(modelURL, metadataURL);
+                
+                showStatus('✓ Model loaded successfully!', 'success');
+                document.getElementById('uploadBtn').disabled = false;
+                document.getElementById('webcamBtn').disabled = false;
+                document.getElementById('loadBtn').disabled = true;
+                document.getElementById('loadBtn').textContent = '✓ Loaded';
+            } catch (error) {
+                showStatus('✗ Error: ' + error.message, 'error');
+                console.error(error);
+            }
         }
 
-        document.getElementById('upload').onclick = () => {
-            document.getElementById('fileInput').click();
-        };
-
-        document.getElementById('fileInput').addEventListener('change', (event) => {
+        document.getElementById('imageInput').addEventListener('change', async (event) => {
             const file = event.target.files[0];
+            if (!file || !model) return;
+
             const reader = new FileReader();
             reader.onload = (e) => {
                 const img = new Image();
                 img.src = e.target.result;
                 img.onload = async () => {
-                    const prediction = await model.predict(tmImage.fromImage(img));
-                    labelContainer.innerHTML = `Prediction: ${prediction[0].className} - Probability: ${prediction[0].probability.toFixed(2)}`;
+                    document.getElementById('imagePreview').src = img.src;
+                    document.getElementById('imagePreview').style.display = 'block';
+                    
+                    try {
+                        showStatus('Classifying...', 'info');
+                        const prediction = await model.predict(img, false);
+                        displayResults(prediction);
+                        showStatus('✓ Classification complete!', 'success');
+                    } catch (error) {
+                        showStatus('✗ Error: ' + error.message, 'error');
+                        console.error(error);
+                    }
                 };
-                document.body.appendChild(img);
             };
             reader.readAsDataURL(file);
         });
 
-        window.onload = init;
+        async function toggleWebcam() {
+            if (!model) return;
+
+            if (!webcamRunning) {
+                try {
+                    showStatus('Starting webcam...', 'info');
+                    const size = 200;
+                    const flip = true;
+                    webcam = new tmImage.Webcam(size, size, flip);
+                    await webcam.setup();
+                    await webcam.play();
+                    document.getElementById('webcam').style.display = 'block';
+                    document.getElementById('webcamBtn').textContent = '⏹️ Stop Webcam';
+                    webcamRunning = true;
+                    showStatus('✓ Webcam started - Real-time classification active', 'success');
+                    webcamLoop();
+                } catch (error) {
+                    showStatus('✗ Webcam error: ' + error.message, 'error');
+                    console.error(error);
+                }
+            } else {
+                webcam.stop();
+                document.getElementById('webcam').style.display = 'none';
+                document.getElementById('webcamBtn').textContent = 'Start Webcam';
+                webcamRunning = false;
+                document.getElementById('results').style.display = 'none';
+                showStatus('Webcam stopped', 'info');
+            }
+        }
+
+        async function webcamLoop() {
+            if (!webcamRunning || !model) return;
+
+            webcam.update();
+            const prediction = await model.predict(webcam.canvas, false);
+            displayResults(prediction);
+            
+            window.requestAnimationFrame(webcamLoop);
+        }
+
+        function displayResults(predictions) {
+            const resultsDiv = document.getElementById('results');
+            let html = '';
+            
+            predictions.forEach(p => {
+                const percentage = (p.probability * 100).toFixed(2);
+                const barWidth = (p.probability * 100);
+                html += `
+                    <div class="result-item">
+                        <div class="class-name">${p.className}</div>
+                        <div class="bar-container">
+                            <div class="bar-fill" style="width: ${barWidth}%"></div>
+                        </div>
+                        <div class="percentage">${percentage}%</div>
+                    </div>
+                `;
+            });
+            
+            resultsDiv.innerHTML = html;
+            resultsDiv.style.display = 'block';
+        }
+
+        // Initialize
+        showStatus('Ready! Click "Load Model" to begin', 'info');
     </script>
 </body>
 </html>
