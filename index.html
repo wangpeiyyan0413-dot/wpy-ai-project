@@ -1,298 +1,401 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Who Are You Without Labels?</title>
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-  <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Who Are You Without Labels?</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
 
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background-color: #000;
-      color: #fff;
-      overflow: hidden;
-      font-family: 'Courier New', Courier, monospace;
-    }
-    canvas {
-      display: block;
-    }
-    /* 添加一个提示层，防止摄像头未加载时纯黑屏 */
-    #loading-text {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 24px;
-      z-index: 10;
-      pointer-events: none;
-    }
-  </style>
+        body {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        #status-text {
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            animation: blink 1s infinite;
+        }
+
+        #label-overlay {
+            position: absolute;
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: #fff;
+            color: #000;
+            padding: 2px 10px;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+            opacity: 0;
+        }
+
+        /* 视频容器与滤镜 */
+        #video-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            /* 黑白、高对比度艺术滤镜 */
+            filter: grayscale(100%) contrast(150%) brightness(80%);
+            transition: opacity 2s ease;
+            transform: scaleX(-1); /* 镜像 */
+        }
+
+        canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            z-index: 5;
+        }
+
+        /* 结尾字幕 */
+        #ending-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 20;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 4s ease;
+        }
+
+        #ending-text {
+            font-size: 2rem;
+            letter-spacing: 5px;
+            text-align: center;
+            line-height: 2;
+        }
+
+        /* 初始启动按钮 */
+        #start-btn {
+            position: absolute;
+            z-index: 50;
+            padding: 15px 30px;
+            border: 1px solid #fff;
+            background: transparent;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+        }
+
+        #start-btn:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
 </head>
 <body>
 
-  <div id="loading-text">REQUESTING CAMERA ACCESS...</div>
+    <button id="start-btn">INITIATE SYSTEM</button>
 
-  <script>
-    let video;
-    let poseNet;
-    let poses = [];
-    let state = 0; 
-    let stateStartTime;
-    let motionLevel = 0;
-    let prevNose = null;
-    let currentMislabel = "ANALYZING...";
-    let lastLabelChange = 0;
-    let modelIsReady = false;
+    <div id="video-container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
 
-    const mislabels = [
-      "ABNORMAL MOVEMENT", "THREAT DETECTED", "IRRATIONAL BIOMASS", 
-      "UNDEFINED GESTURE", "MALFUNCTION IN SUBJECT", "EMOTION: FATAL ERROR",
-      "NON-STANDARD BEHAVIOR", "MEAT_SACK_DETECTED"
-    ];
+    <div id="ui-layer">
+        <div id="status-text">SYS.STANDBY</div>
+        <div id="timeline-info" style="font-size: 0.8rem; opacity: 0.5;">T: 00:00:00</div>
+    </div>
+    
+    <div id="label-overlay"></div>
 
-    function setup() {
-      createCanvas(windowWidth, windowHeight);
-      
-      // 初始化摄像头
-      video = createCapture(VIDEO, function() {
-        // 摄像头权限获取成功后，隐藏 HTML 提示文本
-        document.getElementById('loading-text').style.display = 'none';
-      });
-      video.size(640, 480);
-      video.hide();
-      
-      poseNet = ml5.poseNet(video, { flipHorizontal: true }, modelReady);
-      poseNet.on('pose', function(results) {
-        poses = results;
-      });
-      
-      textFont('Courier New');
-      stateStartTime = millis();
-    }
+    <div id="ending-screen">
+        <div id="ending-text">— "Who are you without labels?" —</div>
+    </div>
 
-    function modelReady() {
-      console.log("Model Loaded Successfully");
-      modelIsReady = true;
-      stateStartTime = millis(); // 模型加载完毕后重新计时，确保阶段时间准确
-    }
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
 
-    function draw() {
-      background(0);
-      
-      if (!modelIsReady) {
-        // 模型未加载完时的缓冲动画
-        fill(255);
-        textAlign(CENTER, CENTER);
-        textSize(24);
-        text("INITIALIZING NEURAL NETWORK...", width / 2, height / 2 + 50);
-        return; 
-      }
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const statusText = document.getElementById('status-text');
+        const labelOverlay = document.getElementById('label-overlay');
+        const endingScreen = document.getElementById('ending-screen');
+        const timelineInfo = document.getElementById('timeline-info');
 
-      let elapsedTime = (millis() - stateStartTime) / 1000;
-      
-      calculateMotion();
+        let detector;
+        let startTime;
+        let isRunning = false;
+        let lastKeypoints = [];
+        let state = 0; // 0: Recognition, 1: Classification, 2: Misunderstanding, 3: Datafication, 4: Ending
 
-      // 阶段控制
-      if (elapsedTime < 5) state = 0;           
-      else if (elapsedTime < 12) state = 1;      
-      else if (elapsedTime < 25) state = 2;      
-      else if (elapsedTime < 45) state = 3;      
-      else if (elapsedTime < 60) state = 4;      
-      else state = 5;                            
+        // 荒谬标签库 (Misunderstanding 阶段)
+        const absurdLabels = [
+            "ABNORMAL MOVEMENT", "THREAT DETECTED", "UNAUTHORIZED BREATHING",
+            "ROMANTICIZING DATA", "ATTEMPTING TO FLY?", "MALWARE BEHAVIOR",
+            "SIMULATING EMOTION", "DEMONIC POSSESSION?", "ERROR 404: SOUL NOT FOUND",
+            "GLITCH IN THE MATRIX", "CONSTRUCTING LIES", "BIOLOGICAL WASTE"
+        ];
 
-      // 画面居中与自适应缩放
-      let vW = width;
-      let vH = width * (480 / 640);
-      if (vH < height) {
-        vH = height;
-        vW = height * (640 / 480);
-      }
-      let vX = (width - vW) / 2;
-      let vY = (height - vH) / 2;
-
-      // 阶段 0-3：视频与 UI
-      if (state < 4) {
-        push();
-        translate(vX, vY);
-        scale(vW / 640, vH / 480);
-        
-        drawingContext.filter = 'grayscale(100%) contrast(1.2) brightness(0.8)';
-        push();
-        translate(640, 0);
-        scale(-1, 1);
-        image(video, 0, 0, 640, 480);
-        pop();
-        drawingContext.filter = 'none';
-
-        drawTrackingUI();
-        
-        if (poses.length > 0) {
-          drawSkeleton();
-          drawBoundingBox();
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 1280, height: 720 },
+                audio: false
+            });
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    resolve(video);
+                };
+            });
         }
-        pop();
-      }
 
-      // 阶段 4：数据虚无化
-      if (state === 4) {
-        push();
-        translate(vX, vY);
-        scale(vW / 640, vH / 480);
-        if (poses.length > 0) drawGlitchSkeleton();
-        pop();
-        
-        fill(255, 50);
-        noStroke();
-        for(let i=0; i<100; i++){
-          rect(random(width), random(height), random(5, 20), 2);
+        async function init() {
+            startBtn.style.display = 'none';
+            statusText.innerText = "INITIALIZING NEURAL NET...";
+            
+            await setupCamera();
+            video.play();
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
+            detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
+            
+            startTime = Date.now();
+            isRunning = true;
+            statusText.innerText = "ANALYZING...";
+            
+            detectPose();
         }
-      }
 
-      drawLabels();
-    }
+        function drawSkeleton(keypoints, isDatafication = false) {
+            const adjacentKeyPoints = poseDetection.util.getAdjacentPairs(poseDetection.SupportedModels.MoveNet);
+            
+            if (isDatafication) {
+                // 数据化阶段：像素化、骨骼化
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 5;
+                ctx.fillStyle = '#000';
+            } else {
+                // 正常阶段：技术感细线
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = 1;
+                ctx.fillStyle = '#fff';
+            }
 
-    function drawLabels() {
-      fill(255);
-      noStroke();
-      textAlign(CENTER, CENTER);
+            adjacentKeyPoints.forEach(([i, j]) => {
+                const kp1 = keypoints[i];
+                const kp2 = keypoints[j];
+                if (kp1.score > 0.3 && kp2.score > 0.3) {
+                    ctx.beginPath();
+                    ctx.moveTo(kp1.x, kp1.y);
+                    ctx.lineTo(kp2.x, kp2.y);
+                    ctx.stroke();
+                }
+            });
 
-      if (state === 0) {
-        textSize(32);
-        text("[ ANALYZING... ]", width / 2, height - 50);
-      } 
-      else if (state === 1) {
-        textSize(32);
-        text("[ HUMAN DETECTED ]", width / 2, height - 50);
-      } 
-      else if (state === 2) {
-        textSize(32);
-        let label = "INACTIVE OBJECT";
-        if (motionLevel > 15) label = "WARNING: UNSTABLE MOTION";
-        if (poses.length > 0) {
-          let pose = poses[0].pose;
-          if (pose.leftWrist.y < pose.nose.y || pose.rightWrist.y < pose.nose.y) {
-            label = "EMOTION DETECTED";
-          }
-          let eyeDist = dist(pose.leftEye.x, pose.leftEye.y, pose.rightEye.x, pose.rightEye.y);
-          if (eyeDist > 100) label = "WARNING: DISTANCE TOO CLOSE";
+            keypoints.forEach(kp => {
+                if (kp.score > 0.3) {
+                    if (isDatafication) {
+                        // 绘制遮罩化像素块
+                        if (kp.name === 'nose' || kp.name.includes('eye')) {
+                            ctx.fillStyle = '#fff';
+                            ctx.fillRect(kp.x - 20, kp.y - 10, 40, 20); // Mask化面部
+                            ctx.fillStyle = '#000';
+                            ctx.font = '12px Courier';
+                            ctx.fillText('NULL', kp.x - 15, kp.y + 5);
+                        } else {
+                            ctx.fillStyle = '#fff';
+                            ctx.fillRect(kp.x - 5, kp.y - 5, 10, 10); // 像素化关节
+                        }
+                    } else {
+                        // 正常节点
+                        ctx.beginPath();
+                        ctx.arc(kp.x, kp.y, 4, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                }
+            });
         }
-        text(`[ ${label} ]`, width / 2, height - 50);
-      } 
-      else if (state === 3) {
-        textSize(40);
-        if (millis() - lastLabelChange > 1500) { 
-          currentMislabel = random(mislabels);
-          lastLabelChange = millis();
+
+        function analyzeAction(keypoints) {
+            // 获取特定关节点
+            const nose = keypoints.find(k => k.name === 'nose');
+            const leftWrist = keypoints.find(k => k.name === 'left_wrist');
+            const rightWrist = keypoints.find(k => k.name === 'right_wrist');
+            const leftShoulder = keypoints.find(k => k.name === 'left_shoulder');
+            const rightShoulder = keypoints.find(k => k.name === 'right_shoulder');
+
+            if (!nose || !leftWrist || !rightWrist || !leftShoulder || !rightShoulder) return;
+
+            let motion = 0;
+            if (lastKeypoints.length > 0) {
+                motion = Math.abs(leftWrist.x - lastKeypoints.find(k=>k.name==='left_wrist').x) + 
+                         Math.abs(rightWrist.x - lastKeypoints.find(k=>k.name==='right_wrist').x);
+            }
+            lastKeypoints = JSON.parse(JSON.stringify(keypoints));
+
+            const shoulderDist = Math.abs(leftShoulder.x - rightShoulder.x);
+            const handsUp = leftWrist.y < nose.y || rightWrist.y < nose.y;
+
+            // 定位标签在用户头部上方 (需处理镜像坐标转换)
+            const uiX = window.innerWidth - ((nose.x / video.videoWidth) * window.innerWidth);
+            const uiY = (nose.y / video.videoHeight) * window.innerHeight - 80;
+            
+            labelOverlay.style.left = `${uiX}px`;
+            labelOverlay.style.top = `${uiY}px`;
+            labelOverlay.style.opacity = 1;
+
+            if (state === 1) {
+                // 分类 (Classification)
+                if (shoulderDist > video.videoWidth * 0.4) {
+                    labelOverlay.innerText = "WARNING: PROXIMITY ALERT";
+                    labelOverlay.style.background = "#ff0000";
+                    labelOverlay.style.color = "#fff";
+                } else if (handsUp) {
+                    labelOverlay.innerText = "EMOTION DETECTED: EXCITEMENT";
+                    labelOverlay.style.background = "#fff";
+                    labelOverlay.style.color = "#000";
+                } else if (motion < 5) {
+                    labelOverlay.innerText = "INACTIVE OBJECT";
+                    labelOverlay.style.background = "#ccc";
+                } else {
+                    labelOverlay.innerText = "HUMAN BEHAVIOR: NORMAL";
+                }
+            } else if (state === 2) {
+                // 误解 (Misunderstanding)
+                // 随机抽取荒谬标签并增加闪烁
+                if (Math.random() < 0.05) { 
+                    const randomLabel = absurdLabels[Math.floor(Math.random() * absurdLabels.length)];
+                    labelOverlay.innerText = randomLabel;
+                    labelOverlay.style.background = Math.random() > 0.5 ? "#000" : "#fff";
+                    labelOverlay.style.color = labelOverlay.style.background === "rgb(0, 0, 0)" ? "#fff" : "#000";
+                    labelOverlay.style.border = "2px solid #fff";
+                }
+            } else {
+                labelOverlay.style.opacity = 0;
+            }
         }
-        if (motionLevel > 5) fill(255, 0, 0); 
-        text(`[ ${currentMislabel} ]`, width / 2, height - 50);
-      }
-      else if (state === 5) {
-        background(0); 
-        fill(255);
-        textSize(48);
-        text("Who are you without labels?", width / 2, height / 2);
-      }
-    }
 
-    function calculateMotion() {
-      if (poses.length > 0) {
-        let nose = poses[0].pose.nose;
-        if (prevNose) {
-          let d = dist(nose.x, nose.y, prevNose.x, prevNose.y);
-          motionLevel = lerp(motionLevel, d, 0.1);
+        async function detectPose() {
+            if (!isRunning) return;
+
+            const poses = await detector.estimatePoses(video);
+            const elapsed = (Date.now() - startTime) / 1000;
+            timelineInfo.innerText = `SYS.UPTIME: ${elapsed.toFixed(2)}s | STAGE: 0${state}`;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 状态机时间轴管理 (叙事流程)
+            if (elapsed < 5) {
+                // 1. 识别
+                state = 0;
+                if(elapsed > 2) statusText.innerText = "HUMAN DETECTED";
+            } else if (elapsed >= 5 && elapsed < 20) {
+                // 2. 分类
+                state = 1;
+                statusText.innerText = "CLASSIFYING BEHAVIOR...";
+            } else if (elapsed >= 20 && elapsed < 35) {
+                // 3. 误解
+                state = 2;
+                statusText.innerText = "SYSTEM CONFLICT: SEMANTIC FAILURE";
+            } else if (elapsed >= 35 && elapsed < 45) {
+                // 4. 数据化
+                state = 3;
+                statusText.innerText = "DATAFICATION IN PROGRESS...";
+                video.style.opacity = 0; // 褪去肉体质感(隐藏原视频)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; // 残影效果
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            } else if (elapsed >= 45) {
+                // 5. 结尾
+                state = 4;
+                isRunning = false;
+                endingScreen.style.opacity = 1; // 淡入结尾黑屏文字
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                labelOverlay.style.opacity = 0;
+            }
+
+            // 绘制逻辑
+            if (poses.length > 0 && state < 4) {
+                const keypoints = poses[0].keypoints;
+                const isDatafication = (state === 3);
+                drawSkeleton(keypoints, isDatafication);
+                
+                if (state === 1 || state === 2) {
+                    analyzeAction(keypoints);
+                }
+                
+                if (state === 0 && elapsed > 2) {
+                    // Recognition阶段，画大检测框
+                    const xs = keypoints.map(k => k.x);
+                    const ys = keypoints.map(k => k.y);
+                    const minX = Math.min(...xs) - 20;
+                    const minY = Math.min(...ys) - 20;
+                    const width = Math.max(...xs) - minX + 20;
+                    const height = Math.max(...ys) - minY + 20;
+                    
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(minX, minY, width, height);
+                    ctx.font = '16px Courier';
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText('TARGET_LOCKED', minX, minY - 10);
+                }
+            }
+
+            requestAnimationFrame(detectPose);
         }
-        prevNose = { x: nose.x, y: nose.y };
-      } else {
-        motionLevel = lerp(motionLevel, 0, 0.1);
-      }
-    }
 
-    function drawTrackingUI() {
-      stroke(255, 50);
-      strokeWeight(1);
-      line(0, 240, 640, 240);
-      line(320, 0, 320, 480);
-      noFill();
-      ellipse(320, 240, 200, 200);
-    }
+        startBtn.addEventListener('click', init);
 
-    function drawSkeleton() {
-      let pose = poses[0].pose;
-      let skeleton = poses[0].skeleton;
-      stroke(255);
-      strokeWeight(2);
-      for (let j = 0; j < skeleton.length; j++) {
-        let partA = skeleton[j][0];
-        let partB = skeleton[j][1];
-        line(partA.position.x, partA.position.y, partB.position.x, partB.position.y);
-      }
-      noStroke();
-      fill(255);
-      for (let i = 0; i < pose.keypoints.length; i++) {
-        let x = pose.keypoints[i].position.x;
-        let y = pose.keypoints[i].position.y;
-        rectMode(CENTER);
-        rect(x, y, 6, 6);
-      }
-    }
-
-    function drawGlitchSkeleton() {
-      let pose = poses[0].pose;
-      let skeleton = poses[0].skeleton;
-      stroke(255);
-      strokeWeight(4);
-      for (let j = 0; j < skeleton.length; j++) {
-        let partA = skeleton[j][0];
-        let partB = skeleton[j][1];
-        let ox = random(-5, 5); 
-        line(partA.position.x + ox, partA.position.y, partB.position.x - ox, partB.position.y);
-      }
-      noStroke();
-      fill(255);
-      for (let i = 0; i < pose.keypoints.length; i++) {
-        let x = pose.keypoints[i].position.x;
-        let y = pose.keypoints[i].position.y;
-        rect(x, y, random(10, 25), random(10, 25)); 
-      }
-      fill(0);
-      stroke(255);
-      strokeWeight(2);
-      rect(pose.nose.x, pose.nose.y, 80, 100); 
-    }
-
-    function drawBoundingBox() {
-      let pose = poses[0].pose;
-      let minX = 640, minY = 480, maxX = 0, maxY = 0;
-      for (let i = 0; i < pose.keypoints.length; i++) {
-        if (pose.keypoints[i].score > 0.2) {
-          let x = pose.keypoints[i].position.x;
-          let y = pose.keypoints[i].position.y;
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-        }
-      }
-      stroke(255, 150);
-      strokeWeight(1);
-      noFill();
-      rectMode(CORNER);
-      rect(minX - 20, minY - 20, (maxX - minX) + 40, (maxY - minY) + 40);
-      fill(255, 150);
-      noStroke();
-      textAlign(LEFT, BOTTOM);
-      textSize(12);
-      text("OBJ_HUMAN_01", minX - 20, minY - 25);
-    }
-
-    function windowResized() {
-      resizeCanvas(windowWidth, windowHeight);
-    }
-  </script>
+    </script>
 </body>
 </html>
