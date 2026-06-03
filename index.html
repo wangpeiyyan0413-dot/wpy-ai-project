@@ -1,363 +1,209 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teachable Machine - Image Classification</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 700px;
-            width: 100%;
-            padding: 40px;
-        }
-        
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
-        
-        .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 14px;
-        }
-        
-        .section {
-            margin-bottom: 25px;
-        }
-        
-        .section-title {
-            color: #667eea;
-            font-weight: bold;
-            margin-bottom: 12px;
-            font-size: 16px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        button {
-            width: 100%;
-            padding: 14px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 10px;
-        }
-        
-        button:hover:not(:disabled) {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-        }
-        
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-        
-        button:active:not(:disabled) {
-            transform: translateY(-1px);
-        }
-        
-        input[type="file"] {
-            display: none;
-        }
-        
-        #webcam {
-            width: 100%;
-            border-radius: 10px;
-            background: #000;
-            margin: 15px 0;
-            border: 2px solid #667eea;
-        }
-        
-        #imagePreview {
-            width: 100%;
-            border-radius: 10px;
-            margin: 15px 0;
-            display: none;
-            border: 2px solid #667eea;
-        }
-        
-        #results {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 20px;
-            display: none;
-        }
-        
-        .result-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        
-        .result-item:last-child {
-            margin-bottom: 0;
-        }
-        
-        .class-name {
-            min-width: 120px;
-            font-weight: bold;
-            color: #333;
-            font-size: 14px;
-        }
-        
-        .bar-container {
-            flex: 1;
-            height: 10px;
-            background: #e0e0e0;
-            border-radius: 5px;
-            margin: 0 15px;
-            overflow: hidden;
-        }
-        
-        .bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            border-radius: 5px;
-            transition: width 0.5s ease;
-        }
-        
-        .percentage {
-            min-width: 50px;
-            text-align: right;
-            font-weight: bold;
-            color: #667eea;
-            font-size: 14px;
-        }
-        
-        .status {
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 14px;
-            display: none;
-        }
-        
-        .status.show {
-            display: block;
-        }
-        
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border-left: 4px solid #0c5460;
-        }
-        
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border-left: 4px solid #155724;
-        }
-        
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border-left: 4px solid #721c24;
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #667eea;
-            margin-right: 5px;
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Who Are You Without Labels?</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+  
+  <style>
+    body, html {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background-color: #050505; /* 极暗的深灰，比纯黑更有屏幕质感 */
+      color: #fff;
+      overflow: hidden;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    canvas { display: block; }
+    
+    #loading {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 14px;
+      letter-spacing: 4px;
+      pointer-events: none;
+      animation: blink 1s infinite;
+    }
+    
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎯 Teachable Machine</h1>
-        <div class="subtitle">AI-Powered Image Recognition</div>
-        
-        <div id="status" class="status"></div>
-        
-        <!-- Load Model -->
-        <div class="section">
-            <div class="section-title">⚙️ Initialize Model</div>
-            <button onclick="loadModel()" id="loadBtn">Load Model</button>
-        </div>
-        
-        <!-- Upload Image -->
-        <div class="section">
-            <div class="section-title">📤 Upload & Classify Image</div>
-            <button onclick="document.getElementById('imageInput').click()" id="uploadBtn" disabled>
-                Choose Image
-            </button>
-            <input type="file" id="imageInput" accept="image/*">
-            <img id="imagePreview" alt="Image preview">
-        </div>
-        
-        <!-- Webcam -->
-        <div class="section">
-            <div class="section-title">📷 Real-Time Webcam Classification</div>
-            <button onclick="toggleWebcam()" id="webcamBtn" disabled>Start Webcam</button>
-            <canvas id="webcam" style="display: none;"></canvas>
-        </div>
-        
-        <!-- Results -->
-        <div id="results"></div>
-    </div>
 
-    <script>
-        const URL = "https://teachablemachine.withgoogle.com/models/sTBoNGgmv/";
-        
-        let model, webcam, webcamRunning = false;
+  <div id="loading">SYSTEM INITIALIZING... [CAMERA REQ]</div>
 
-        function showStatus(message, type = 'info') {
-            const statusEl = document.getElementById('status');
-            statusEl.textContent = message;
-            statusEl.className = `status show ${type}`;
+  <script>
+    let video;
+    let poseNet;
+    let poses = [];
+    
+    // 时间与状态控制
+    let currentState = 1; 
+    let stateStartTime = 0;
+    
+    // 荒谬标签库
+    const absurdLabels = [
+      "ABNORMAL MOVEMENT", 
+      "THREAT DETECTED: HUG", 
+      "ORIENTATION: HOMOSEXUAL", 
+      "ERROR: EMOTION OVERFLOW",
+      "SUBJECT: MEANINGLESS"
+    ];
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      
+      // 1. 初始化摄像头
+      video = createCapture(VIDEO, function() {
+        document.getElementById('loading').style.display = 'none';
+        stateStartTime = millis(); // 摄像头就绪后开始计时
+      });
+      video.size(windowWidth, windowHeight);
+      video.hide(); 
+
+      // 2. 初始化姿态识别 (开启左右翻转，契合人类照镜子的直觉)
+      let options = { flipHorizontal: true };
+      poseNet = ml5.poseNet(video, options, modelReady);
+      poseNet.on('pose', function(results) {
+        poses = results;
+      });
+      
+      textFont('Courier New');
+    }
+
+    function modelReady() {
+      console.log('CV Model Loaded.');
+    }
+
+    function draw() {
+      background(5);
+      
+      // 3. 渲染摄像头画面 (必须翻动画布来配合 flipHorizontal)
+      push();
+      translate(width, 0);
+      scale(-1, 1);
+      tint(255, 90); // 极度降低真实画面的透明度，呈现冷酷感
+      image(video, 0, 0, width, height);
+      pop();
+
+      // 全局黑白与色阶滤镜
+      filter(GRAY);
+      filter(POSTERIZE, 4);
+
+      // 4. 核心状态机逻辑 (基于 millis 真实时间)
+      let elapsedTime = millis() - stateStartTime;
+
+      if (poses.length > 0) {
+        let pose = poses[0].pose;
+        let skeleton = poses[0].skeleton;
+        runArtLogic(pose, skeleton, elapsedTime);
+      } else {
+        // 无人状态：重置时间，显示等待
+        drawText("AWAITING SUBJECT...", width / 2, height / 2, true);
+        stateStartTime = millis();
+        currentState = 1;
+      }
+    }
+
+    // --- 艺术表达核心逻辑 ---
+    function runArtLogic(pose, skeleton, time) {
+      
+      // 阶段 1：识别 (0 - 5秒)
+      if (time < 5000) {
+        currentState = 1;
+        drawTrackingUI(pose);
+        drawText("> HUMAN DETECTED", pose.nose.x + 60, pose.nose.y - 40);
+        drawText("ANALYZING BIOMETRICS...", width / 2, 50, true);
+      } 
+      
+      // 阶段 2：分类 (5 - 12秒)
+      else if (time >= 5000 && time < 12000) {
+        currentState = 2;
+        drawTrackingUI(pose);
+        drawSkeleton(skeleton, false);
+        
+        let handsUp = pose.leftWrist.y < pose.nose.y && pose.rightWrist.y < pose.nose.y;
+        let armsWide = dist(pose.leftWrist.x, pose.leftWrist.y, pose.rightWrist.x, pose.rightWrist.y) > width * 0.4;
+        
+        if (handsUp) {
+          drawText("[EMOTION DETECTED: SURRENDER]", pose.nose.x, pose.nose.y - 90);
+        } else if (armsWide) {
+          drawText("[WARNING: AGGRESSIVE EXPANSION]", pose.nose.x, pose.nose.y - 90);
+        } else {
+          drawText("[INACTIVE OBJECT / DOCILE]", pose.nose.x, pose.nose.y - 90);
         }
+      }
+      
+      // 阶段 3：误解与故障 (12 - 20秒)
+      else if (time >= 12000 && time < 20000) {
+        currentState = 3;
+        applyGlitchEffect(); // 触发画面撕裂
+        drawSkeleton(skeleton, true); // 骨骼疯狂抖动
+        
+        // 每 0.8 秒切换一次荒谬标签
+        let labelIndex = floor(time / 800) % absurdLabels.length;
+        drawText("!!" + absurdLabels[labelIndex] + "!!", pose.nose.x + random(-20, 20), pose.nose.y - 120 + random(-10, 10));
+        
+        // 随机在屏幕上打印乱码
+        if (random() > 0.8) drawText("SEGMENTATION_FAULT_0x" + hex(floor(random(10000))), random(width), random(height));
+      }
+      
+      // 阶段 4：数据化与剥离 (20 - 28秒)
+      else if (time >= 20000 && time < 28000) {
+        currentState = 4;
+        background(0); // 彻底吞噬真实肉身画面
+        
+        // 计算数据化程度
+        let progress = map(time, 20000, 28000, 0, 1);
+        drawDataMask(pose, progress);
+        
+        drawText("USER_ID: NULL", width / 2, 50, true);
+        drawText("IDENTITY_STRIPPED", width / 2, height - 50, true);
+      }
+      
+      // 阶段 5：灵魂拷问 (28 - 36秒)
+      else if (time >= 28000 && time < 36000) {
+        currentState = 5;
+        background(0);
+        
+        textSize(32);
+        textAlign(CENTER, CENTER);
+        fill(255);
+        text("Who are you without labels?", width / 2, height / 2);
+      }
+      
+      // 循环重置 (36秒后)
+      else if (time >= 36000) {
+        stateStartTime = millis(); // 重新开始这一轮
+      }
+    }
 
-        async function loadModel() {
-            try {
-                showStatus('Loading model...', 'info');
-                const modelURL = URL + "model.json";
-                const metadataURL = URL + "metadata.json";
-                
-                model = await tmImage.load(modelURL, metadataURL);
-                
-                showStatus('✓ Model loaded successfully!', 'success');
-                document.getElementById('uploadBtn').disabled = false;
-                document.getElementById('webcamBtn').disabled = false;
-                document.getElementById('loadBtn').disabled = true;
-                document.getElementById('loadBtn').textContent = '✓ Loaded';
-            } catch (error) {
-                showStatus('✗ Error: ' + error.message, 'error');
-                console.error(error);
-            }
-        }
 
-        document.getElementById('imageInput').addEventListener('change', async (event) => {
-            const file = event.target.files[0];
-            if (!file || !model) return;
+    // --- 视觉绘制辅助函数 ---
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.src = e.target.result;
-                img.onload = async () => {
-                    document.getElementById('imagePreview').src = img.src;
-                    document.getElementById('imagePreview').style.display = 'block';
-                    
-                    try {
-                        showStatus('Classifying...', 'info');
-                        const prediction = await model.predict(img, false);
-                        displayResults(prediction);
-                        showStatus('✓ Classification complete!', 'success');
-                    } catch (error) {
-                        showStatus('✗ Error: ' + error.message, 'error');
-                        console.error(error);
-                    }
-                };
-            };
-            reader.readAsDataURL(file);
-        });
+    function drawTrackingUI(pose) {
+      stroke(255);
+      strokeWeight(1);
+      noFill();
+      let s = 100;
+      // 脸部方框
+      rect(pose.nose.x - s/2, pose.nose.y - s/2, s, s);
+      // 准星
+      line(pose.nose.x - 10, pose.nose.y, pose.nose.x + 10, pose.nose.y);
+      line(pose.nose.x, pose.nose.y - 10, pose.nose.x, pose.nose.y + 10);
+    }
 
-        async function toggleWebcam() {
-            if (!model) return;
-
-            if (!webcamRunning) {
-                try {
-                    showStatus('Starting webcam...', 'info');
-                    const size = 200;
-                    const flip = true;
-                    webcam = new tmImage.Webcam(size, size, flip);
-                    await webcam.setup();
-                    await webcam.play();
-                    document.getElementById('webcam').style.display = 'block';
-                    document.getElementById('webcamBtn').textContent = '⏹️ Stop Webcam';
-                    webcamRunning = true;
-                    showStatus('✓ Webcam started - Real-time classification active', 'success');
-                    webcamLoop();
-                } catch (error) {
-                    showStatus('✗ Webcam error: ' + error.message, 'error');
-                    console.error(error);
-                }
-            } else {
-                webcam.stop();
-                document.getElementById('webcam').style.display = 'none';
-                document.getElementById('webcamBtn').textContent = 'Start Webcam';
-                webcamRunning = false;
-                document.getElementById('results').style.display = 'none';
-                showStatus('Webcam stopped', 'info');
-            }
-        }
-
-        async function webcamLoop() {
-            if (!webcamRunning || !model) return;
-
-            webcam.update();
-            const prediction = await model.predict(webcam.canvas, false);
-            displayResults(prediction);
-            
-            window.requestAnimationFrame(webcamLoop);
-        }
-
-        function displayResults(predictions) {
-            const resultsDiv = document.getElementById('results');
-            let html = '';
-            
-            predictions.forEach(p => {
-                const percentage = (p.probability * 100).toFixed(2);
-                const barWidth = (p.probability * 100);
-                html += `
-                    <div class="result-item">
-                        <div class="class-name">${p.className}</div>
-                        <div class="bar-container">
-                            <div class="bar-fill" style="width: ${barWidth}%"></div>
-                        </div>
-                        <div class="percentage">${percentage}%</div>
-                    </div>
-                `;
-            });
-            
-            resultsDiv.innerHTML = html;
-            resultsDiv.style.display = 'block';
-        }
-
-        // Initialize
-        showStatus('Ready! Click "Load Model" to begin', 'info');
-    </script>
-</body>
-</html>
+    function drawSkeleton(skeleton, isGlitch) {
+      stroke(255);
+      strokeWeight(1);
+      for (let i = 0; i < skeleton.length; i++) {
+        let p1 = skeleton[i][0];
+        let p2 = skeleton[i][1];
+        let offset = isGlitch ? random(-3
