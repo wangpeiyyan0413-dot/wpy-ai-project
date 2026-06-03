@@ -1,209 +1,424 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Who Are You Without Labels?</title>
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
-  <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
-  
-  <style>
-    body, html {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      background-color: #050505; /* 极暗的深灰，比纯黑更有屏幕质感 */
-      color: #fff;
-      overflow: hidden;
-      font-family: 'Courier New', Courier, monospace;
-    }
-    canvas { display: block; }
-    
-    #loading {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 14px;
-      letter-spacing: 4px;
-      pointer-events: none;
-      animation: blink 1s infinite;
-    }
-    
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Who are you without labels?</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- 样式部分 (原 style.css) --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Space Mono', monospace;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+            /* 黑白、高对比度与低亮度，营造冷酷的艺术感 */
+            filter: grayscale(100%) contrast(1.6) brightness(0.7);
+            transition: filter 2s ease;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.1rem;
+            letter-spacing: 2px;
+            opacity: 0.8;
+        }
+
+        #status-indicator {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* 追踪框 UI */
+        #tracking-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40vw;
+            height: 60vh;
+            border: 1px dashed rgba(255, 255, 255, 0.25);
+            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .corner {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-color: #fff;
+            border-style: solid;
+        }
+        .top-left { top: -2px; left: -2px; border-width: 2px 0 0 2px; }
+        .top-right { top: -2px; right: -2px; border-width: 2px 2px 0 0; }
+        .bottom-left { bottom: -2px; left: -2px; border-width: 0 0 2px 2px; }
+        .bottom-right { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+
+        #label-container {
+            align-self: flex-start;
+            text-shadow: 2px 2px 0 #000;
+            max-width: 80%;
+        }
+
+        #main-label {
+            font-size: 2.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            line-height: 1.2;
+            margin-bottom: 0.5rem;
+            transition: color 0.2s ease;
+        }
+
+        #sub-label {
+            font-size: 1.1rem;
+            opacity: 0.6;
+            letter-spacing: 1px;
+        }
+
+        /* 启动按钮 */
+        #start-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            padding: 1.2rem 2.5rem;
+            background: transparent;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            font-family: 'Space Mono', monospace;
+            font-size: 1.1rem;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.4s ease;
+        }
+
+        #start-btn:hover {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+            box-shadow: 0 0 20px rgba(255,255,255,0.4);
+        }
+
+        /* 结局画面 */
+        #ending-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 20;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 5s ease;
+        }
+
+        #philosophical-question {
+            font-family: 'Helvetica Neue', Arial, sans-serif; /* 结尾转为更具人文感、无标签感的经典字体 */
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: 6px;
+            text-align: center;
+            color: #fff;
+            padding: 0 2rem;
+            line-height: 1.6;
+        }
+
+        /* Glitch 故障效果动画 */
+        .glitch-effect {
+            animation: glitch-skew 0.25s linear infinite;
+            color: #ff3b30 !important; /* 误解阶段触发警报红 */
+        }
+
+        @keyframes glitch-skew {
+            0% { transform: translate(0, 0) skew(0deg); }
+            20% { transform: translate(-4px, 2px) skew(-5deg); }
+            40% { transform: translate(3px, -3px) skew(3deg); }
+            60% { transform: translate(-3px, -1px) skew(-2deg); }
+            80% { transform: translate(4px, 3px) skew(5deg); }
+            100% { transform: translate(0, 0) skew(0deg); }
+        }
+    </style>
 </head>
 <body>
 
-  <div id="loading">SYSTEM INITIALIZING... [CAMERA REQ]</div>
-
-  <script>
-    let video;
-    let poseNet;
-    let poses = [];
+    <canvas id="gl-canvas"></canvas>
     
-    // 时间与状态控制
-    let currentState = 1; 
-    let stateStartTime = 0;
-    
-    // 荒谬标签库
-    const absurdLabels = [
-      "ABNORMAL MOVEMENT", 
-      "THREAT DETECTED: HUG", 
-      "ORIENTATION: HOMOSEXUAL", 
-      "ERROR: EMOTION OVERFLOW",
-      "SUBJECT: MEANINGLESS"
-    ];
-
-    function setup() {
-      createCanvas(windowWidth, windowHeight);
-      
-      // 1. 初始化摄像头
-      video = createCapture(VIDEO, function() {
-        document.getElementById('loading').style.display = 'none';
-        stateStartTime = millis(); // 摄像头就绪后开始计时
-      });
-      video.size(windowWidth, windowHeight);
-      video.hide(); 
-
-      // 2. 初始化姿态识别 (开启左右翻转，契合人类照镜子的直觉)
-      let options = { flipHorizontal: true };
-      poseNet = ml5.poseNet(video, options, modelReady);
-      poseNet.on('pose', function(results) {
-        poses = results;
-      });
-      
-      textFont('Courier New');
-    }
-
-    function modelReady() {
-      console.log('CV Model Loaded.');
-    }
-
-    function draw() {
-      background(5);
-      
-      // 3. 渲染摄像头画面 (必须翻动画布来配合 flipHorizontal)
-      push();
-      translate(width, 0);
-      scale(-1, 1);
-      tint(255, 90); // 极度降低真实画面的透明度，呈现冷酷感
-      image(video, 0, 0, width, height);
-      pop();
-
-      // 全局黑白与色阶滤镜
-      filter(GRAY);
-      filter(POSTERIZE, 4);
-
-      // 4. 核心状态机逻辑 (基于 millis 真实时间)
-      let elapsedTime = millis() - stateStartTime;
-
-      if (poses.length > 0) {
-        let pose = poses[0].pose;
-        let skeleton = poses[0].skeleton;
-        runArtLogic(pose, skeleton, elapsedTime);
-      } else {
-        // 无人状态：重置时间，显示等待
-        drawText("AWAITING SUBJECT...", width / 2, height / 2, true);
-        stateStartTime = millis();
-        currentState = 1;
-      }
-    }
-
-    // --- 艺术表达核心逻辑 ---
-    function runArtLogic(pose, skeleton, time) {
-      
-      // 阶段 1：识别 (0 - 5秒)
-      if (time < 5000) {
-        currentState = 1;
-        drawTrackingUI(pose);
-        drawText("> HUMAN DETECTED", pose.nose.x + 60, pose.nose.y - 40);
-        drawText("ANALYZING BIOMETRICS...", width / 2, 50, true);
-      } 
-      
-      // 阶段 2：分类 (5 - 12秒)
-      else if (time >= 5000 && time < 12000) {
-        currentState = 2;
-        drawTrackingUI(pose);
-        drawSkeleton(skeleton, false);
+    <div id="ui-layer">
+        <div class="top-bar">
+            <span id="status-indicator">● SYSTEM ACTIVE</span>
+            <span id="time-code">00:00:00:00</span>
+        </div>
         
-        let handsUp = pose.leftWrist.y < pose.nose.y && pose.rightWrist.y < pose.nose.y;
-        let armsWide = dist(pose.leftWrist.x, pose.leftWrist.y, pose.rightWrist.x, pose.rightWrist.y) > width * 0.4;
+        <div id="tracking-box">
+            <span class="corner top-left"></span>
+            <span class="corner top-right"></span>
+            <span class="corner bottom-left"></span>
+            <span class="corner bottom-right"></span>
+        </div>
         
-        if (handsUp) {
-          drawText("[EMOTION DETECTED: SURRENDER]", pose.nose.x, pose.nose.y - 90);
-        } else if (armsWide) {
-          drawText("[WARNING: AGGRESSIVE EXPANSION]", pose.nose.x, pose.nose.y - 90);
-        } else {
-          drawText("[INACTIVE OBJECT / DOCILE]", pose.nose.x, pose.nose.y - 90);
+        <div id="label-container">
+            <h1 id="main-label">SYSTEM READY</h1>
+            <p id="sub-label">Awaiting human subject to enter the frame.</p>
+        </div>
+    </div>
+
+    <div id="ending-screen">
+        <h1 id="philosophical-question">Who are you without labels?</h1>
+    </div>
+
+    <button id="start-btn">INITIALIZE SYSTEM (ACCESS CAMERA)</button>
+
+    <script>
+        // --- 逻辑部分 (原 script.js) ---
+        const canvas = document.getElementById('gl-canvas');
+        const ctx = canvas.getContext('2d');
+        const video = document.createElement('video');
+
+        const startBtn = document.getElementById('start-btn');
+        const mainLabel = document.getElementById('main-label');
+        const subLabel = document.getElementById('sub-label');
+        const trackingBox = document.getElementById('tracking-box');
+        const timeCode = document.getElementById('time-code');
+        const endingScreen = document.getElementById('ending-screen');
+        const uiLayer = document.getElementById('ui-layer');
+
+        let animationId;
+        let previousFrame = null;
+        let motionLevel = 0;
+        let currentState = 0; 
+        let stateTimer = 0;
+
+        // 配置每个阶段的时长（单位：帧数。假设每秒60帧，600帧约为10秒）
+        const STAGE_DURATION = 600; 
+
+        // 绑定启动事件
+        startBtn.addEventListener('click', async () => {
+            try {
+                // 开启摄像头
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+                video.play();
+                startBtn.style.display = 'none';
+                
+                video.addEventListener('loadedmetadata', () => {
+                    // 让画布分辨率匹配视频输入尺寸
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    currentState = 1; // 切换至第一阶段（识别）
+                    processVideo();
+                });
+            } catch (err) {
+                alert("Error: System requires camera access to process biometric data.");
+            }
+        });
+
+        // 实时更新顶部冰冷的时间码（时:分:秒:毫秒）
+        setInterval(() => {
+            const now = new Date();
+            const hrs = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            const ms = String(Math.floor(now.getMilliseconds() / 10)).padStart(2, '0');
+            timeCode.innerText = `${hrs}:${mins}:${secs}:${ms}`;
+        }, 40);
+
+        // 主循环逻辑
+        function processVideo() {
+            // 1. 将当前摄像头画面绘制到画布上
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // 2. 运用简易帧差法计算观众的运动量（Motion Level）
+            calculateMotion();
+
+            // 3. 递增状态计时器并执行状态机
+            stateTimer++;
+            handleStates();
+
+            // 4. 递归下一帧
+            animationId = requestAnimationFrame(processVideo);
         }
-      }
-      
-      // 阶段 3：误解与故障 (12 - 20秒)
-      else if (time >= 12000 && time < 20000) {
-        currentState = 3;
-        applyGlitchEffect(); // 触发画面撕裂
-        drawSkeleton(skeleton, true); // 骨骼疯狂抖动
-        
-        // 每 0.8 秒切换一次荒谬标签
-        let labelIndex = floor(time / 800) % absurdLabels.length;
-        drawText("!!" + absurdLabels[labelIndex] + "!!", pose.nose.x + random(-20, 20), pose.nose.y - 120 + random(-10, 10));
-        
-        // 随机在屏幕上打印乱码
-        if (random() > 0.8) drawText("SEGMENTATION_FAULT_0x" + hex(floor(random(10000))), random(width), random(height));
-      }
-      
-      // 阶段 4：数据化与剥离 (20 - 28秒)
-      else if (time >= 20000 && time < 28000) {
-        currentState = 4;
-        background(0); // 彻底吞噬真实肉身画面
-        
-        // 计算数据化程度
-        let progress = map(time, 20000, 28000, 0, 1);
-        drawDataMask(pose, progress);
-        
-        drawText("USER_ID: NULL", width / 2, 50, true);
-        drawText("IDENTITY_STRIPPED", width / 2, height - 50, true);
-      }
-      
-      // 阶段 5：灵魂拷问 (28 - 36秒)
-      else if (time >= 28000 && time < 36000) {
-        currentState = 5;
-        background(0);
-        
-        textSize(32);
-        textAlign(CENTER, CENTER);
-        fill(255);
-        text("Who are you without labels?", width / 2, height / 2);
-      }
-      
-      // 循环重置 (36秒后)
-      else if (time >= 36000) {
-        stateStartTime = millis(); // 重新开始这一轮
-      }
-    }
 
+        // 简易运动量计算函数（帧差法）
+        function calculateMotion() {
+            const sampleW = 64; 
+            const sampleH = 64;
+            
+            // 创建离屏微型画布优化计算性能
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = sampleW;
+            tempCanvas.height = sampleH;
+            
+            tempCtx.drawImage(video, 0, 0, sampleW, sampleH);
+            const currentFrameData = tempCtx.getImageData(0, 0, sampleW, sampleH).data;
+            
+            if (previousFrame) {
+                let diff = 0;
+                // 每4个值代表一个像素点（R, G, B, A），对比R通道的差值
+                for (let i = 0; i < currentFrameData.length; i += 4) {
+                    diff += Math.abs(currentFrameData[i] - previousFrame[i]);
+                }
+                // 标准化输出运动系数
+                motionLevel = diff / (sampleW * sampleH);
+            }
+            previousFrame = currentFrameData;
+        }
 
-    // --- 视觉绘制辅助函数 ---
+        // 五大交互逻辑状态机
+        function handleStates() {
+            
+            // 1. 识别阶段 (Recognition)
+            if (currentState === 1) {
+                mainLabel.innerText = "HUMAN DETECTED";
+                subLabel.innerText = "ANALYZING SKELETON & MOVEMENT... KEEP VISIBLE.";
+                trackingBox.style.borderColor = "#fff";
+                trackingBox.style.width = "45vw";
+                trackingBox.style.height = "65vh";
+                
+                if (stateTimer > STAGE_DURATION) {
+                    currentState = 2;
+                    stateTimer = 0;
+                }
+            }
+            
+            // 2. 分类阶段 (Classification)
+            else if (currentState === 2) {
+                if (motionLevel > 35) {
+                    // 检测到剧烈动作
+                    mainLabel.innerText = "EMOTION DETECTED";
+                    subLabel.innerText = "Subject posture indicates high emotional expression.";
+                    trackingBox.style.width = "55vw";
+                } else if (motionLevel < 6) {
+                    // 长时间不动
+                    mainLabel.innerText = "INACTIVE OBJECT";
+                    subLabel.innerText = "Biological signs low. Potential static hardware.";
+                    trackingBox.style.width = "30vw";
+                } else {
+                    // 普通动作
+                    mainLabel.innerText = "NORMAL SUBJECT";
+                    subLabel.innerText = "Categorization logic running in background.";
+                    trackingBox.style.width = "40vw";
+                }
+                
+                if (stateTimer > STAGE_DURATION) {
+                    currentState = 3;
+                    stateTimer = 0;
+                }
+            }
+            
+            // 3. 误解阶段 (Misunderstanding)
+            else if (currentState === 3) {
+                // 概率触发 UI 的 Glitch 摇晃样式
+                if (Math.random() > 0.75) {
+                    mainLabel.classList.add('glitch-effect');
+                } else {
+                    mainLabel.classList.remove('glitch-effect');
+                }
 
-    function drawTrackingUI(pose) {
-      stroke(255);
-      strokeWeight(1);
-      noFill();
-      let s = 100;
-      // 脸部方框
-      rect(pose.nose.x - s/2, pose.nose.y - s/2, s, s);
-      // 准星
-      line(pose.nose.x - 10, pose.nose.y, pose.nose.x + 10, pose.nose.y);
-      line(pose.nose.x, pose.nose.y - 10, pose.nose.x, pose.nose.y + 10);
-    }
+                if (motionLevel > 25) {
+                    // 愉快的舞蹈或张开双臂被判定为威胁
+                    mainLabel.innerText = "THREAT DETECTED / ABNORMAL MOVEMENT";
+                    subLabel.innerText = "CRITICAL ERROR: Hostile intentions identified.";
+                    trackingBox.style.borderColor = "#ff3b30";
+                    // 模拟骨骼抖动异化，让追踪框产生随机偏转
+                    trackingBox.style.transform = `translate(-50%, -50%) rotate(${Math.random() * 8 - 4}deg) scale(${1 + Math.random()*0.05})`;
+                } else {
+                    // 荒谬标签误判
+                    mainLabel.innerText = "BIOMETRIC MISCALCULATED: GAY";
+                    subLabel.innerText = "Algorithmic bias encountered. Attempting automated override...";
+                }
 
-    function drawSkeleton(skeleton, isGlitch) {
-      stroke(255);
-      strokeWeight(1);
-      for (let i = 0; i < skeleton.length; i++) {
-        let p1 = skeleton[i][0];
-        let p2 = skeleton[i][1];
-        let offset = isGlitch ? random(-3
+                if (stateTimer > STAGE_DURATION) {
+                    currentState = 4;
+                    stateTimer = 0;
+                    mainLabel.classList.remove('glitch-effect');
+                    trackingBox.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
+                }
+            }
+            
+            // 4. 数据化阶段 (Datafication)
+            else if (currentState === 4) {
+                mainLabel.innerText = "USER DETECTED";
+                subLabel.innerText = "Stripping personal details... Identity quantified.";
+                trackingBox.style.display = "none"; // 抹去检测框 UI
+                
+                // 动态马赛克算法：随着时间推移，像素尺寸（pixelSize）越来越大
+                const pixelSize = Math.floor(stateTimer / 15) + 4; 
+                const w = canvas.width;
+                const h = canvas.height;
+                
+                // 通过 Canvas 的缩放关闭平滑渲染，实现高质感的像素艺术剥离
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(canvas, 0, 0, w / pixelSize, h / pixelSize);
+                ctx.drawImage(canvas, 0, 0, w / pixelSize, h / pixelSize, 0, 0, w, h);
+                
+                // 在画面上叠加绘制冰冷的几何骨骼线条
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(w / 2, h / 4);  // 头部到躯干
+                ctx.lineTo(w / 2, h / 1.8);
+                ctx.lineTo(w / 2.8, h);    // 左腿
+                ctx.moveTo(w / 2, h / 1.8);
+                ctx.lineTo(w / 1.5, h);    // 右腿
+                ctx.moveTo(w / 3, h / 2.5); // 两臂
+                ctx.lineTo(w / 1.5, h / 2.5);
+                ctx.stroke();
+
+                if (stateTimer > STAGE_DURATION) {
+                    currentState = 5;
+                }
+            }
+            
+            // 5. 结尾阶段 (Ending)
+            else if (currentState === 5) {
+                cancelAnimationFrame(animationId); // 彻底断开摄像头帧渲染
+                uiLayer.style.display = "none";   // 隐藏冰冷的系统UI
+                endingScreen.style.opacity = "1";  // 优雅淡入最终的黑屏哲学提问
+            }
+        }
+    </script>
+</body>
+</html>
