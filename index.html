@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Who Are You Without Labels?</title>
+    <title>标签之外的你 | Who Are You Without Labels</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -15,66 +15,29 @@
             color: #fff; 
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
             overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            width: 100vw;
             height: 100vh;
         }
         
-        /* 容器与画布 */
-        #container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        video { display: none; } /* 隐藏原生视频，使用canvas绘制 */
-        canvas { 
-            position: absolute; 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
-            transform: scaleX(-1); /* 镜像翻转，符合直觉 */
-            transition: opacity 2s ease;
-        }
-
-        /* UI 叠加层 */
-        #ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        #video-element { display: none; }
         
-        /* 状态与指令文本 */
-        #status-text {
+        /* 使用两个画布：底层视频/识别层，顶层粒子/UI层 */
+        #cv-canvas, #ui-canvas {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 24px;
-            letter-spacing: 4px;
-            font-weight: 300;
-            text-align: center;
-            transition: opacity 1s ease;
-            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 禁用鼠标事件，纯靠摄像头手势 */
         }
 
-        /* 标签样式 */
-        .label {
-            position: absolute;
-            color: #00ffcc;
-            background: rgba(0, 0, 0, 0.7);
-            border: 1px solid #00ffcc;
-            padding: 4px 10px;
-            font-size: 14px;
-            font-weight: bold;
-            transform: translate(-50%, -50%);
-            transition: all 0.3s ease;
-            opacity: 0.9;
-            box-shadow: 0 0 8px rgba(0,255,204,0.4);
-            white-space: nowrap;
+        #cv-canvas {
+            transform: scaleX(-1); /* 镜像翻转，使互动符合直觉 */
+            opacity: 0;
+            transition: opacity 1.5s ease;
         }
 
-        .label.misunderstand {
-            color: #ff3366;
-            border-color: #ff3366;
-            box-shadow: 0 0 10px rgba(255,51,102,0.6);
-            font-size: 16px;
-            animation: glitch 0.2s infinite;
-        }
-
-        /* 结尾哲思提问 */
+        /* 纯 CSS 结尾画面 */
         #ending-screen {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -84,263 +47,370 @@
             justify-content: center;
             align-items: center;
             opacity: 0;
-            z-index: 20;
+            z-index: 50;
             transition: opacity 3s ease;
             pointer-events: none;
         }
-        #ending-screen h1 { font-size: 32px; font-weight: 300; letter-spacing: 2px; margin-bottom: 20px; }
+        #ending-screen h1 { font-size: 40px; font-weight: 300; letter-spacing: 6px; margin-bottom: 20px; text-shadow: 0 0 20px rgba(255,255,255,0.5); }
         #ending-screen p { font-size: 18px; color: #888; letter-spacing: 4px; }
 
-        @keyframes glitch {
-            0% { transform: translate(-50%, -50%) skew(0deg); }
-            20% { transform: translate(-52%, -50%) skew(-10deg); }
-            40% { transform: translate(-48%, -50%) skew(10deg); }
-            60% { transform: translate(-50%, -52%) skew(0deg); }
-            80% { transform: translate(-50%, -48%) skew(0deg); }
-            100% { transform: translate(-50%, -50%) skew(0deg); }
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 20px; letter-spacing: 4px; color: #fff;
+            animation: pulse 1.5s infinite;
+            z-index: 100;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; }
         }
     </style>
 </head>
 <body>
 
-<div id="container">
-    <video id="videoElement" autoplay playsinline></video>
-    <canvas id="canvasElement"></canvas>
-    
-    <div id="ui-layer">
-        <div id="status-text">ANALYZING...<br><span style="font-size:14px; color:#aaa;">(分析中……)</span></div>
-        <div id="labels-container"></div>
-    </div>
+    <div id="loading">载入神经计算网络...</div>
+    <video id="video-element" autoplay playsinline></video>
+    <canvas id="cv-canvas"></canvas>
+    <canvas id="ui-canvas"></canvas>
 
     <div id="ending-screen">
         <h1>褪去标签，你究竟是谁？</h1>
         <p>Who are you without labels?</p>
     </div>
-</div>
 
 <script>
-    const videoElement = document.getElementById('videoElement');
-    const canvasElement = document.getElementById('canvasElement');
-    const canvasCtx = canvasElement.getContext('2d');
-    const statusText = document.getElementById('status-text');
-    const labelsContainer = document.getElementById('labels-container');
+    const videoElement = document.getElementById('video-element');
+    const cvCanvas = document.getElementById('cv-canvas');
+    const uiCanvas = document.getElementById('ui-canvas');
+    const cvCtx = cvCanvas.getContext('2d');
+    const uiCtx = uiCanvas.getContext('2d');
+    const loadingUI = document.getElementById('loading');
     const endingScreen = document.getElementById('ending-screen');
 
-    // 交互状态与时间轴配置
-    let interactionStartTime = null;
-    let currentState = 'recognition'; 
-    let lastLandmarks = null;
-    let labelUpdateTimer = 0;
+    let width, height;
+    let currentState = 'INTRO'; // 状态：INTRO, RECOGNITION, CLASSIFICATION, MISUNDERSTANDING, DATAFICATION, ENDING
+    let lastPose = null;
+    let dataficationProgress = 0;
 
-    // 各种阶段的标签库
-    const normalLabels = ["姿态：静止", "动作：舒展", "行为：观察", "空间：占据", "状态：活动中"];
-    const actionLabels = ["动作：挥舞", "动作：移动", "动作：试图打破边界", "姿态：防御"];
+    // 标签库
+    const normalLabels = ["状态：静止", "动作：舒展", "行为：观察", "空间：交互中", "动态：试探"];
+    const actionLabels = ["动作：挥舞", "状态：剧烈运动", "行为：打破边界", "姿态：防御"];
     const absurdLabels = [
-        "系统错误：未熟透的碳基生物", 
-        "野生奥特曼检测中", 
-        "试图起飞的打字机", 
-        "卡顿的NPC", 
-        "正在下载灵魂 (Error 404)", 
-        "人类早期驯服四肢珍贵影像", 
-        "无效的求偶舞蹈",
-        "一棵情绪不稳定的树",
-        "警告：企图逃离三维空间"
+        "未认证的碳基生物", "试图起飞的打字机", "卡顿的 NPC", 
+        "情感模块 Error", "野生奥特曼检测中", "无效的求偶舞蹈",
+        "一棵情绪不稳定的树", "正在下载灵魂 404"
     ];
+    let currentRandomLabels = [];
 
-    function resizeCanvas() {
-        canvasElement.width = window.innerWidth;
-        canvasElement.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-
-    // 状态机管理器
-    function updateStateMachine(landmarks) {
-        if (!interactionStartTime) {
-            interactionStartTime = Date.now();
-            statusText.innerHTML = "HUMAN DETECTED<br><span style='font-size:14px; color:#00ffcc;'>[ 检测到人类 ]</span>";
-            setTimeout(() => statusText.style.opacity = 0, 2500);
+    // --- 粒子系统 (黑白高级感) ---
+    class Particle {
+        constructor(x, y) {
+            this.x = x; this.y = y;
+            this.vx = (Math.random() - 0.5) * 1.5;
+            this.vy = (Math.random() - 0.5) * 1.5;
+            this.size = Math.random() * 2 + 0.5;
+            this.baseSize = this.size;
+            this.color = `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.1})`;
         }
+        update(handX, handY) {
+            this.x += this.vx; this.y += this.vy;
+            if (this.x < 0 || this.x > width) this.vx *= -1;
+            if (this.y < 0 || this.y > height) this.vy *= -1;
 
-        let elapsed = (Date.now() - interactionStartTime) / 1000;
-
-        if (elapsed < 3) {
-            currentState = 'recognition';
-        } else if (elapsed >= 3 && elapsed < 12) {
-            currentState = 'classification';
-        } else if (elapsed >= 12 && elapsed < 22) {
-            currentState = 'misunderstanding';
-        } else if (elapsed >= 22 && elapsed < 32) {
-            currentState = 'datafication';
-        } else if (elapsed >= 32) {
-            currentState = 'ending';
-        }
-
-        updateLabels(landmarks, elapsed);
-    }
-
-    // 动态生成和更新标签
-    function updateLabels(landmarks, elapsed) {
-        labelUpdateTimer++;
-        // 每隔一段时间更新一次标签，避免闪烁过快
-        if (labelUpdateTimer % 15 !== 0) return;
-
-        labelsContainer.innerHTML = ''; // 清除旧标签
-
-        if (currentState === 'classification') {
-            // 计算动作幅度判定动/静
-            let isMoving = false;
-            if (lastLandmarks) {
-                let diff = Math.abs(landmarks[0].x - lastLandmarks[0].x) + Math.abs(landmarks[0].y - lastLandmarks[0].y);
-                if (diff > 0.02) isMoving = true;
-            }
-            lastLandmarks = landmarks;
-
-            let text = isMoving ? actionLabels[Math.floor(Math.random() * actionLabels.length)] : normalLabels[Math.floor(Math.random() * normalLabels.length)];
-            createDOMText(text, landmarks[0].x, landmarks[0].y - 0.1, 'label');
-        } 
-        else if (currentState === 'misunderstanding') {
-            // 误解阶段：随机在身体多个节点贴荒诞标签
-            for (let i = 0; i < 3; i++) {
-                let randomNode = landmarks[Math.floor(Math.random() * 20)];
-                let text = absurdLabels[Math.floor(Math.random() * absurdLabels.length)];
-                createDOMText(text, randomNode.x, randomNode.y, 'label misunderstand');
-            }
-        }
-        else if (currentState === 'datafication' || currentState === 'ending') {
-            // 清除所有DOM标签
-            labelsContainer.innerHTML = '';
-        }
-    }
-
-    // 创建 DOM 标签元素
-    function createDOMText(text, x, y, className) {
-        const el = document.createElement('div');
-        el.className = className;
-        el.innerText = text;
-        // 因为 canvas 是水平翻转的 (scaleX(-1))，DOM坐标需要反转 X 轴对齐
-        el.style.left = `${(1 - x) * 100}%`; 
-        el.style.top = `${y * 100}%`;
-        labelsContainer.appendChild(el);
-    }
-
-    // 核心绘制逻辑
-    function onResults(results) {
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-        // 阶段 4：数据化 (抹除真实的肉体)
-        if (currentState === 'datafication') {
-            // 绘制半透明黑色背景，逐渐覆盖原生画面，产生拖影和消亡感
-            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-            canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-        } else if (currentState !== 'ending') {
-            // 正常阶段绘制视频源
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-        }
-
-        // 检测到人体特征
-        if (results.poseLandmarks && currentState !== 'ending') {
-            updateStateMachine(results.poseLandmarks);
-
-            // 绘制骨架和点
-            if (currentState === 'datafication') {
-                // 数据化阶段：像素化、骨骼化
-                drawDataficationBones(results.poseLandmarks);
-            } else {
-                // 正常识别阶段：科幻UI风
-                drawTechUIBones(results.poseLandmarks);
-            }
-        }
-
-        // 阶段 5：结尾
-        if (currentState === 'ending') {
-            canvasCtx.fillStyle = '#000';
-            canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-            endingScreen.style.opacity = 1;
-        }
-
-        canvasCtx.restore();
-    }
-
-    // 绘制高级科技感的骨骼UI（前三个阶段）
-    function drawTechUIBones(landmarks) {
-        // 绘制骨架连接线
-        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, {color: '#00ffcc', lineWidth: 2});
-        // 绘制关节点
-        drawLandmarks(canvasCtx, landmarks, {color: '#ffffff', fillColor: '#ff3366', lineWidth: 2, radius: 4});
-        
-        // 计算并绘制检测框 (Bounding Box)
-        let minX = 1, minY = 1, maxX = 0, maxY = 0;
-        landmarks.forEach(lm => {
-            if (lm.x < minX) minX = lm.x;
-            if (lm.y < minY) minY = lm.y;
-            if (lm.x > maxX) maxX = lm.x;
-            if (lm.y > maxY) maxY = lm.y;
-        });
-
-        const w = canvasElement.width;
-        const h = canvasElement.height;
-        const x = minX * w; const y = minY * h;
-        const rectW = (maxX - minX) * w; const rectH = (maxY - minY) * h;
-
-        canvasCtx.strokeStyle = 'rgba(0, 255, 204, 0.6)';
-        canvasCtx.lineWidth = 1;
-        canvasCtx.strokeRect(x, y, rectW, rectH);
-
-        // 绘制角落装饰线 (增添AI系统视觉感)
-        const cornerLen = 20;
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(x, y + cornerLen); canvasCtx.lineTo(x, y); canvasCtx.lineTo(x + cornerLen, y); // 左上
-        canvasCtx.moveTo(x + rectW, y + cornerLen); canvasCtx.lineTo(x + rectW, y); canvasCtx.lineTo(x + rectW - cornerLen, y); // 右上
-        canvasCtx.moveTo(x, y + rectH - cornerLen); canvasCtx.lineTo(x, y + rectH); canvasCtx.lineTo(x + cornerLen, y + rectH); // 左下
-        canvasCtx.moveTo(x + rectW, y + rectH - cornerLen); canvasCtx.lineTo(x + rectW, y + rectH); canvasCtx.lineTo(x + rectW - cornerLen, y + rectH); // 右下
-        canvasCtx.strokeStyle = '#00ffcc';
-        canvasCtx.lineWidth = 3;
-        canvasCtx.stroke();
-    }
-
-    // 绘制数据化阶段的抽象骨骼（Phase 4）
-    function drawDataficationBones(landmarks) {
-        // 使用纯白和随机噪点线代替原来的追踪 UI，制造剥离感
-        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, {color: '#ffffff', lineWidth: 1});
-        
-        const w = canvasElement.width;
-        const h = canvasElement.height;
-
-        // 在面部/身体周围绘制混乱的像素块(Mask化)
-        canvasCtx.fillStyle = '#ffffff';
-        landmarks.forEach((lm, index) => {
-            if(index < 11) { // 头部节点
-                let size = Math.random() * 30 + 10;
-                canvasCtx.fillRect(lm.x * w - size/2, lm.y * h - size/2, size, size);
-            } else {
-                if(Math.random() > 0.5) {
-                    canvasCtx.fillRect(lm.x * w, lm.y * h, 5, 5);
+            // 手部引力/斥力互动
+            if (handX && handY) {
+                let dx = handX - this.x; let dy = handY - this.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 150) {
+                    this.x -= dx * 0.02; // 斥力
+                    this.y -= dy * 0.02;
+                    this.size = this.baseSize * 3;
+                } else {
+                    this.size = this.baseSize;
                 }
             }
-        });
+        }
+        draw(ctx) {
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
-    // 初始化 MediaPipe Pose
-    const pose = new Pose({locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-    }});
+    let particles = [];
+    function initParticles() {
+        particles = [];
+        for (let i = 0; i < 200; i++) {
+            particles.push(new Particle(Math.random() * width, Math.random() * height));
+        }
+    }
 
-    pose.setOptions({
+    // --- 跨界面交互按钮 (手势触发) ---
+    class Button {
+        constructor(x, y, label, targetState) {
+            this.x = x; this.y = y; this.r = 45;
+            this.label = label;
+            this.targetState = targetState;
+            this.hoverProgress = 0;
+        }
+        update(handX, handY) {
+            if (currentState === this.targetState) return; // 已激活状态忽略
+            
+            let dx = handX - this.x; let dy = handY - this.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < this.r + 20) {
+                this.hoverProgress += 0.03; // 悬停加载进度
+                if (this.hoverProgress >= 1) {
+                    currentState = this.targetState; // 触发切换
+                    this.hoverProgress = 0;
+                    dataficationProgress = 0;
+                    if (currentState === 'MISUNDERSTANDING') generateRandomLabels();
+                    createRipple(this.x, this.y); // 粒子爆炸反馈
+                }
+            } else {
+                this.hoverProgress = Math.max(0, this.hoverProgress - 0.05);
+            }
+        }
+        draw(ctx) {
+            ctx.strokeStyle = currentState === this.targetState ? '#fff' : 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 悬停进度条
+            if (this.hoverProgress > 0 && currentState !== this.targetState) {
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.r, -Math.PI/2, -Math.PI/2 + (Math.PI * 2 * this.hoverProgress));
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = currentState === this.targetState ? '#fff' : 'rgba(255,255,255,0.7)';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(this.label, this.x, this.y);
+        }
+    }
+
+    let buttons = [];
+    let ripples = [];
+
+    function initUI() {
+        // 在画面边缘创建交互按钮
+        buttons = [
+            new Button(100, height/2 - 150, "1.识别", "RECOGNITION"),
+            new Button(100, height/2, "2.分类", "CLASSIFICATION"),
+            new Button(100, height/2 + 150, "3.误解", "MISUNDERSTANDING"),
+            new Button(width - 100, height/2 - 75, "4.数据化", "DATAFICATION"),
+            new Button(width - 100, height/2 + 75, "5.结尾", "ENDING")
+        ];
+    }
+
+    function createRipple(x, y) {
+        ripples.push({x, y, r: 0, alpha: 1});
+    }
+
+    function generateRandomLabels() {
+        currentRandomLabels = [];
+        for(let i=0; i<4; i++){
+            currentRandomLabels.push({
+                text: absurdLabels[Math.floor(Math.random() * absurdLabels.length)],
+                node: Math.floor(Math.random() * 25)
+            });
+        }
+    }
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        cvCanvas.width = width; cvCanvas.height = height;
+        uiCanvas.width = width; uiCanvas.height = height;
+        initParticles();
+        initUI();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- 核心绘制逻辑 ---
+    function onResults(results) {
+        if(loadingUI.style.display !== 'none') {
+            loadingUI.style.display = 'none';
+            cvCanvas.style.opacity = 1; // 淡入摄像头
+            currentState = 'RECOGNITION';
+        }
+
+        // 1. 底层视觉处理 (彩色视频 + 色彩追踪)
+        cvCtx.save();
+        cvCtx.clearRect(0, 0, width, height);
+
+        // 数据化阶段逐渐让肉体消失 (半透明黑覆盖)
+        if (currentState === 'DATAFICATION') {
+            dataficationProgress = Math.min(1, dataficationProgress + 0.005);
+            cvCtx.globalAlpha = 1 - dataficationProgress;
+        }
+
+        if (currentState !== 'ENDING') {
+            cvCtx.drawImage(results.image, 0, 0, width, height);
+        }
+        cvCtx.restore();
+
+        // 2. 顶层 UI/粒子处理
+        uiCtx.clearRect(0, 0, width, height);
+
+        // 获取食指用于交互 (优先右手，其次左手)
+        let indexTip = null;
+        let handX = null, handY = null;
+        if (results.rightHandLandmarks) { indexTip = results.rightHandLandmarks[8]; }
+        else if (results.leftHandLandmarks) { indexTip = results.leftHandLandmarks[8]; }
+        
+        if (indexTip) {
+            // 注意：因为底层视频 scaleX(-1) 翻转了，手势坐标也需要反转以映射到屏幕
+            handX = (1 - indexTip.x) * width; 
+            handY = indexTip.y * height;
+            
+            // 绘制手势光标
+            uiCtx.beginPath();
+            uiCtx.arc(handX, handY, 8, 0, Math.PI * 2);
+            uiCtx.fillStyle = '#fff';
+            uiCtx.fill();
+            uiCtx.shadowBlur = 15; uiCtx.shadowColor = "#fff";
+            uiCtx.shadowBlur = 0;
+        }
+
+        // 绘制并更新粒子
+        particles.forEach(p => { p.update(handX, handY); p.draw(uiCtx); });
+
+        // 绘制涟漪特效
+        ripples.forEach((r, i) => {
+            r.r += 8; r.alpha -= 0.02;
+            uiCtx.beginPath(); uiCtx.arc(r.x, r.y, r.r, 0, Math.PI*2);
+            uiCtx.strokeStyle = `rgba(255, 255, 255, ${r.alpha})`;
+            uiCtx.lineWidth = 2; uiCtx.stroke();
+            if(r.alpha <= 0) ripples.splice(i, 1);
+        });
+
+        // 更新与绘制按钮
+        if (currentState !== 'ENDING') {
+            buttons.forEach(btn => {
+                if (handX && handY) btn.update(handX, handY);
+                btn.draw(uiCtx);
+            });
+        }
+
+        // --- 业务逻辑：艺术阶段表现 ---
+        if (results.poseLandmarks && currentState !== 'INTRO' && currentState !== 'ENDING') {
+            const pose = results.poseLandmarks;
+            
+            // 阶段 1：识别 (彩色科幻感)
+            if (currentState === 'RECOGNITION') {
+                drawSkeletalTracking(uiCtx, pose, '#00ffff'); // 青色识别
+                drawLabel(uiCtx, "ANALYZING...", (1 - pose[0].x) * width, pose[0].y * height - 80, '#00ffff');
+                drawLabel(uiCtx, "[ HUMAN DETECTED ]", width/2, height - 50, '#00ffff', 24);
+            }
+            
+            // 阶段 2：分类 (逻辑贴图)
+            if (currentState === 'CLASSIFICATION') {
+                let speed = 0;
+                if (lastPose) {
+                    let dx = pose[0].x - lastPose[0].x; let dy = pose[0].y - lastPose[0].y;
+                    speed = Math.sqrt(dx*dx + dy*dy);
+                }
+                lastPose = pose;
+                
+                let text = speed > 0.02 ? actionLabels[Math.floor(Date.now() / 500) % actionLabels.length] : normalLabels[0];
+                drawSkeletalTracking(uiCtx, pose, 'rgba(255, 255, 255, 0.4)');
+                drawLabel(uiCtx, text, (1 - pose[0].x) * width + 80, pose[0].y * height, '#fff');
+            }
+
+            // 阶段 3：误解 (荒诞错误)
+            if (currentState === 'MISUNDERSTANDING') {
+                drawSkeletalTracking(uiCtx, pose, 'rgba(255, 51, 102, 0.6)'); // 红色错误感
+                if(Math.random() < 0.02) generateRandomLabels(); // 偶尔刷新
+                currentRandomLabels.forEach(lbl => {
+                    let node = pose[lbl.node];
+                    if(node) {
+                        drawLabel(uiCtx, lbl.text, (1 - node.x) * width, node.y * height, '#ff3366');
+                    }
+                });
+            }
+
+            // 阶段 4：数据化 (剥离物理特征)
+            if (currentState === 'DATAFICATION') {
+                // 在面部生成马赛克(Mask化)
+                uiCtx.fillStyle = `rgba(255, 255, 255, ${dataficationProgress})`;
+                for(let i=0; i<11; i++){
+                    if(pose[i]) {
+                        let px = (1 - pose[i].x) * width; let py = pose[i].y * height;
+                        let size = Math.random() * 40 + 10;
+                        uiCtx.fillRect(px - size/2, py - size/2, size, size);
+                    }
+                }
+                // 绘制纯粹的冰冷骨架
+                drawConnectors(uiCtx, pose, POSE_CONNECTIONS, {color: '#fff', lineWidth: 1});
+            }
+        }
+
+        // 阶段 5：终局
+        if (currentState === 'ENDING') {
+            uiCanvas.style.opacity = 0; // 隐藏界面
+            endingScreen.style.opacity = 1; // 浮现终极提问
+        } else {
+            uiCanvas.style.opacity = 1;
+            endingScreen.style.opacity = 0;
+        }
+    }
+
+    // 辅助绘图：绘制带有一定科幻感的标签
+    function drawLabel(ctx, text, x, y, color, size=16) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.font = `${size}px sans-serif`;
+        let m = ctx.measureText(text);
+        
+        ctx.beginPath();
+        ctx.rect(x - m.width/2 - 10, y - 20, m.width + 20, 30);
+        ctx.fill(); ctx.stroke();
+        
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y - 5);
+    }
+
+    // 辅助绘图：绘制骨架 (需手动处理翻转映射)
+    function drawSkeletalTracking(ctx, landmarks, color) {
+        ctx.save();
+        ctx.translate(width, 0); ctx.scale(-1, 1); // 翻转画布以匹配原生连线函数
+        drawConnectors(ctx, landmarks, POSE_CONNECTIONS, {color: color, lineWidth: 2});
+        drawLandmarks(ctx, landmarks, {color: color, radius: 2});
+        ctx.restore();
+    }
+
+    // --- 初始化 MediaPipe ---
+    const holistic = new Holistic({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
+    }});
+    
+    holistic.setOptions({
         modelComplexity: 1,
         smoothLandmarks: true,
         enableSegmentation: false,
+        refineFaceLandmarks: false,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
     });
+    holistic.onResults(onResults);
 
-    pose.onResults(onResults);
-
-    // 启动摄像头
     const camera = new Camera(videoElement, {
         onFrame: async () => {
-            await pose.send({image: videoElement});
+            await holistic.send({image: videoElement});
         },
         width: 1280,
         height: 720
